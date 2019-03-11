@@ -1,0 +1,380 @@
+import requests
+import json
+import sys
+import requests
+import argparse
+
+from requests.packages.urllib3.exceptions import InsecureRequestWarning
+requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+
+rmc_host_ip=''
+
+cert_path=False
+debug = 1
+isssue_del_warning = True
+del_warning = "Are you sure you want to delete all the event subscriptions? (make sure this RMC {} is reserved by you) [Y/N] : "
+ov_ip_resp_map = {}
+
+def log(level, msg):
+    if level == 0:
+        print msg
+    else:
+        if debug:
+            print msg
+
+def createSessionToken():
+    url='https://'+rmc_host_ip +'/redfish/v1/SessionService/Sessions'
+    headers = {'Content-type': 'application/json'}
+    data={'UserName':'administrator','Password':'HPE1nnov'}
+    verify=cert_path
+    response = requests.post(url, data=json.dumps(data), headers=headers, verify=verify)
+    if response.status_code == 201:
+        return response.headers['X-Auth-Token']
+    else:
+        print 'error in getting session token ' + str(response.status_code)
+        return ''
+
+def getEventSubscriberIp(sub_url, sessionId):
+    url='https://'+rmc_host_ip + sub_url
+    headers = {'x-auth-token':sessionId}
+    verify=cert_path
+    response = requests.get(url, headers=headers, verify=verify)
+    if response.status_code == 200:
+        dest = response.json()['Destination'] if 'Destination' in response.json() else ''
+        if dest:
+            ov_ip = dest.split('/')[2]
+            ov_ip_resp_map[ov_ip] = response.json()
+            return ov_ip
+    else:
+        print 'error in getting event subscription : ' + str(response.status_code)
+        return ''
+
+def deleteEventSubscription(sub_url, sessionId, ip):
+    url='https://'+rmc_host_ip + sub_url
+    headers = {'x-auth-token':sessionId}
+    verify=cert_path
+    response = requests.delete(url, headers=headers, verify=verify)
+    if response.status_code == 204:
+        log(0, "===== event subscription for " + ip + " deleted ======")
+    else:
+        print 'error in deleting event subscription : ' + str(response.status_code)
+        return ''
+
+def getEventSubHosts(sessionId):
+import requests
+import json
+import sys
+import requests
+import argparse
+
+from requests.packages.urllib3.exceptions import InsecureRequestWarning
+requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+
+rmc_host_ip=''
+
+cert_path=False
+debug = 1
+isssue_del_warning = True
+del_warning = "Are you sure you want to delete all the event subscriptions? (make sure this RMC {} is reserved by you) [Y/N] : "
+ov_ip_resp_map = {}
+
+def log(level, msg):
+    if level == 0:
+        print msg
+    else:
+        if debug:
+            print msg
+
+def createSessionToken():
+    url='https://'+rmc_host_ip +'/redfish/v1/SessionService/Sessions'
+    headers = {'Content-type': 'application/json'}
+    data={'UserName':'administrator','Password':'HPE1nnov'}
+    verify=cert_path
+    response = requests.post(url, data=json.dumps(data), headers=headers, verify=verify)
+    if response.status_code == 201:
+        return response.headers['X-Auth-Token']
+    else:
+        print 'error in getting session token ' + str(response.status_code)
+        return ''
+
+def getEventSubscriberIp(sub_url, sessionId):
+    url='https://'+rmc_host_ip + sub_url
+    headers = {'x-auth-token':sessionId}
+    verify=cert_path
+    response = requests.get(url, headers=headers, verify=verify)
+    if response.status_code == 200:
+        dest = response.json()['Destination'] if 'Destination' in response.json() else ''
+        if dest:
+            ov_ip = dest.split('/')[2]
+            ov_ip_resp_map[ov_ip] = response.json()
+            return ov_ip
+    else:
+        print 'error in getting event subscription : ' + str(response.status_code)
+        return ''
+
+def deleteEventSubscription(sub_url, sessionId, ip):
+    url='https://'+rmc_host_ip + sub_url
+    headers = {'x-auth-token':sessionId}
+    verify=cert_path
+    response = requests.delete(url, headers=headers, verify=verify)
+    if response.status_code == 204:
+        log(0, "===== event subscription for " + ip + " deleted ======")
+    else:
+        print 'error in deleting event subscription : ' + str(response.status_code)
+        return ''
+
+def getEventSubHosts(sessionId):
+    url='https://'+rmc_host_ip +'/redfish/v1/EventService/Subscriptions'
+    headers = {'x-auth-token':sessionId}
+    verify=cert_path
+    response = requests.get(url, headers=headers, verify=verify)
+    #print response
+    if response.status_code == 200:
+        return response.json()['Members'] if 'Members' in response.json() else ''
+    else:
+        print 'error in getting event subscription : ' + str(response.status_code)
+        return ''
+
+def executeEventSubUserCmd(sessionId, opt, opt_val, event_subs):
+    ip_addr_list = []
+    if opt == "--get":
+        if opt_val[0] == "all":
+            for link in event_subs:
+                sub_url = link['@odata.id']
+                ip_addr = getEventSubscriberIp(sub_url, sessionId)
+                if ip_addr:
+                    ip_addr_list.append(ip_addr)
+            for ip in ip_addr_list:
+                print ip
+        else:
+            list_of_ov_ips = opt_val
+            for link in event_subs:
+                sub_url = link['@odata.id']
+                getEventSubscriberIp(sub_url, sessionId)
+            for ip in list_of_ov_ips:
+                if ip in ov_ip_resp_map:
+                    parseEvtSubResponse(ip, ov_ip_resp_map[ip])
+    elif opt == "--delete":
+        if opt_val[0] == "all":
+            user_ip=raw_input(del_warning.format(rmc_host_ip))
+            if user_ip == 'Y' or user_ip == 'y':
+                print("deleting")
+                exit(0)
+            else:
+                log(0, "skipping delete subscriptions")
+                exit(0)
+        else:
+            list_of_ov_ips = opt_val
+            if not ov_ip_resp_map:
+                for link in event_subs:
+                    sub_url = link['@odata.id']
+                    getEventSubscriberIp(sub_url, sessionId)
+            for ip in list_of_ov_ips:
+                if ip in ov_ip_resp_map:
+                    executeDeleteSubCommand(ip, ov_ip_resp_map[ip], sessionId)
+                else:
+                    log(0, "OV " + ip + " not subscribed for events")
+
+def parseEvtSubResponse(ip, response_map):
+    log(0, "====== " + ip + " event subscription details =======")
+    log(0, "Context     : " + response_map['Context'])
+    log(0, "Destination : " + response_map['Destination'])
+    log(0, "EventTypes  : " + str(response_map['EventTypes']))
+    log(0, "================================================")
+
+def executeDeleteSubCommand(ip, response_map, sessionId):
+    log(0, "====== deleting event subscription for " + ip + " =======")
+    destination_url = response_map['@odata.id']
+    deleteEventSubscription(destination_url, sessionId, ip)
+    log(0, "================================================")
+    url='https://'+rmc_host_ip +'/redfish/v1/EventService/Subscriptions'
+    headers = {'x-auth-token':sessionId}
+    verify=cert_path
+    response = requests.get(url, headers=headers, verify=verify)
+    #print response
+    if response.status_code == 200:
+        return response.json()['Members'] if 'Members' in response.json() else ''
+    else:
+        print 'error in getting event subscription : ' + str(response.status_code)
+        return ''
+
+def executeEventSubUserCmd(sessionId, opt, opt_val, event_subs):
+    ip_addr_list = []
+    if opt == "--get":
+        if opt_val[0] == "all":
+            for link in event_subs:
+                sub_url = link['@odata.id']
+                ip_addr = getEventSubscriberIp(sub_url, sessionId)
+                if ip_addr:
+                    ip_addr_list.append(ip_addr)
+            for ip in ip_addr_list:
+                print ip
+        else:
+            list_of_ov_ips = opt_val
+            for link in event_subs:
+                sub_url = link['@odata.id']
+                getEventSubscriberIp(sub_url, sessionId)
+            for ip in list_of_ov_ips:
+                if ip in ov_ip_resp_map:
+                    parseEvtSubResponse(ip, ov_ip_resp_map[ip])
+    elif opt == "--delete":
+        if opt_val[0] == "all":
+            user_ip=raw_input(del_warning.format(rmc_host_ip))
+            if user_ip == 'Y' or user_ip == 'y':
+                print("deleting")
+                exit(0)
+            else:
+                log(0, "skipping delete subscriptions")
+                exit(0)
+        else:
+            list_of_ov_ips = opt_val
+            if not ov_ip_resp_map:
+                for link in event_subs:
+                    sub_url = link['@odata.id']
+                    getEventSubscriberIp(sub_url, sessionId)
+            for ip in list_of_ov_ips:
+                if ip in ov_ip_resp_map:
+                    executeDeleteSubCommand(ip, ov_ip_resp_map[ip], sessionId)
+                else:
+                    log(0, "OV " + ip + " not subscribed for events")
+
+def parseEvtSubResponse(ip, response_map):
+    log(0, "====== " + ip + " event subscription details =======")
+    log(0, "Context     : " + response_map['Context'])
+    log(0, "Destination : " + response_map['Destination'])
+    log(0, "EventTypes  : " + str(response_map['EventTypes']))
+    log(0, "================================================")
+
+def executeDeleteSubCommand(ip, response_map, sessionId):
+    log(0, "====== deleting event subscription for " + ip + " =======")
+    destination_url = response_map['@odata.id']
+    deleteEventSubscription(destination_url, sessionId, ip)
+    log(0, "================================================")
+    
+def usage(prog):
+    help = """Usage {} <rmc_ip> [--get all] [--get ov_ip_1,ov_ip_2..] [--delete ov_ip_1,ov_ip_2..] [--delete all] """.format(prog)
+    print help
+    exit(0)
+
+def parseAndLoadArgs(args):
+    prog = args[0]
+    opt = "--get"
+    list_of_ov_ip = ["all"]
+    if len(args) == 2:
+        rmc_ip = args[1]
+    elif len(args) == 3:
+        usage(prog)
+    elif len(args) == 4:
+        rmc_ip = args[1]
+        opt = args[2]
+        if opt == "--get":
+            val = args[3]
+            if val != "all":
+                list_of_ov_ip = val.split(",")
+        elif opt == "--delete":
+            val = args[3]
+            if val != "all":
+                list_of_ov_ip = val.split(",")
+            else:
+                isssue_del_warning = True
+        else:
+            usage(prog)
+    else:
+        usage(prog)
+    printUserInput(prog, rmc_ip, opt, ",".join(list_of_ov_ip))
+    return [rmc_ip, opt, list_of_ov_ip]
+
+def printUserInput(prog, rmc_ip, opt, opt_val):
+    log(1, prog + ' ' + rmc_ip + ' ' + opt + ' ' + opt_val)
+
+if __name__ == '__main__':
+    ip_args = parseAndLoadArgs(sys.argv)
+    rmc_host_ip = ip_args[0]
+    opt = ip_args[1]
+    opt_val = ip_args[2]
+    try:
+        log(1, 'Checking connection to RMC...' + rmc_host_ip)
+        verify=cert_path
+        test = requests.get('https://'+ rmc_host_ip, verify=verify)
+        log(0, 'Connection to RMC OK.')
+    except requests.exceptions.SSLError as err:
+        log(0, 'SSL Error. ' + str(err))
+        exit(2)
+    sessionId = createSessionToken()
+    log(1, 'Session token ' + sessionId)
+
+    if sessionId:
+        response = getEventSubHosts(sessionId)
+        sub_len = len(response)
+        print 'Total subscriptions : ' + str(sub_len) + (" (max limit)" if (sub_len == 6) else "")
+        #print response
+        ip_addr_list=[]
+        if sub_len > 0:
+            log(1, 'getting event subscriptions')
+            executeEventSubUserCmd(sessionId, opt, opt_val, response)
+        
+    
+def usage(prog):
+    help = """Usage {} <rmc_ip> [--get all] [--get ov_ip_1,ov_ip_2..] [--delete ov_ip_1,ov_ip_2..] [--delete all] """.format(prog)
+    print help
+    exit(0)
+
+def parseAndLoadArgs(args):
+    prog = args[0]
+    opt = "--get"
+    list_of_ov_ip = ["all"]
+    if len(args) == 2:
+        rmc_ip = args[1]
+    elif len(args) == 3:
+        usage(prog)
+    elif len(args) == 4:
+        rmc_ip = args[1]
+        opt = args[2]
+        if opt == "--get":
+            val = args[3]
+            if val != "all":
+                list_of_ov_ip = val.split(",")
+        elif opt == "--delete":
+            val = args[3]
+            if val != "all":
+                list_of_ov_ip = val.split(",")
+            else:
+                isssue_del_warning = True
+        else:
+            usage(prog)
+    else:
+        usage(prog)
+    printUserInput(prog, rmc_ip, opt, ",".join(list_of_ov_ip))
+    return [rmc_ip, opt, list_of_ov_ip]
+
+def printUserInput(prog, rmc_ip, opt, opt_val):
+    log(1, prog + ' ' + rmc_ip + ' ' + opt + ' ' + opt_val)
+
+if __name__ == '__main__':
+    ip_args = parseAndLoadArgs(sys.argv)
+    rmc_host_ip = ip_args[0]
+    opt = ip_args[1]
+    opt_val = ip_args[2]
+    try:
+        log(1, 'Checking connection to RMC...' + rmc_host_ip)
+        verify=cert_path
+        test = requests.get('https://'+ rmc_host_ip, verify=verify)
+        log(0, 'Connection to RMC OK.')
+    except requests.exceptions.SSLError as err:
+        log(0, 'SSL Error. ' + str(err))
+        exit(2)
+    sessionId = createSessionToken()
+    log(1, 'Session token ' + sessionId)
+
+    if sessionId:
+        response = getEventSubHosts(sessionId)
+        sub_len = len(response)
+        print 'Total subscriptions : ' + str(sub_len) + (" (max limit)" if (sub_len == 6) else "")
+        #print response
+        ip_addr_list=[]
+        if sub_len > 0:
+            log(1, 'getting event subscriptions')
+            executeEventSubUserCmd(sessionId, opt, opt_val, response)
+        
+    else:
+        exit(2)

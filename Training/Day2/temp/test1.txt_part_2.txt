@@ -1,0 +1,63 @@
+    url='https://'+rmc_host_ip +'/redfish/v1/EventService/Subscriptions'
+    headers = {'x-auth-token':sessionId}
+    verify=cert_path
+    response = requests.get(url, headers=headers, verify=verify)
+    #print response
+    if response.status_code == 200:
+        return response.json()['Members'] if 'Members' in response.json() else ''
+    else:
+        print 'error in getting event subscription : ' + str(response.status_code)
+        return ''
+
+def executeEventSubUserCmd(sessionId, opt, opt_val, event_subs):
+    ip_addr_list = []
+    if opt == "--get":
+        if opt_val[0] == "all":
+            for link in event_subs:
+                sub_url = link['@odata.id']
+                ip_addr = getEventSubscriberIp(sub_url, sessionId)
+                if ip_addr:
+                    ip_addr_list.append(ip_addr)
+            for ip in ip_addr_list:
+                print ip
+        else:
+            list_of_ov_ips = opt_val
+            for link in event_subs:
+                sub_url = link['@odata.id']
+                getEventSubscriberIp(sub_url, sessionId)
+            for ip in list_of_ov_ips:
+                if ip in ov_ip_resp_map:
+                    parseEvtSubResponse(ip, ov_ip_resp_map[ip])
+    elif opt == "--delete":
+        if opt_val[0] == "all":
+            user_ip=raw_input(del_warning.format(rmc_host_ip))
+            if user_ip == 'Y' or user_ip == 'y':
+                print("deleting")
+                exit(0)
+            else:
+                log(0, "skipping delete subscriptions")
+                exit(0)
+        else:
+            list_of_ov_ips = opt_val
+            if not ov_ip_resp_map:
+                for link in event_subs:
+                    sub_url = link['@odata.id']
+                    getEventSubscriberIp(sub_url, sessionId)
+            for ip in list_of_ov_ips:
+                if ip in ov_ip_resp_map:
+                    executeDeleteSubCommand(ip, ov_ip_resp_map[ip], sessionId)
+                else:
+                    log(0, "OV " + ip + " not subscribed for events")
+
+def parseEvtSubResponse(ip, response_map):
+    log(0, "====== " + ip + " event subscription details =======")
+    log(0, "Context     : " + response_map['Context'])
+    log(0, "Destination : " + response_map['Destination'])
+    log(0, "EventTypes  : " + str(response_map['EventTypes']))
+    log(0, "================================================")
+
+def executeDeleteSubCommand(ip, response_map, sessionId):
+    log(0, "====== deleting event subscription for " + ip + " =======")
+    destination_url = response_map['@odata.id']
+    deleteEventSubscription(destination_url, sessionId, ip)
+    log(0, "================================================")

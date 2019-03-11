@@ -1,0 +1,63 @@
+import requests
+import json
+import sys
+import requests
+import argparse
+
+from requests.packages.urllib3.exceptions import InsecureRequestWarning
+requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+
+rmc_host_ip=''
+
+cert_path=False
+debug = 1
+isssue_del_warning = True
+del_warning = "Are you sure you want to delete all the event subscriptions? (make sure this RMC {} is reserved by you) [Y/N] : "
+ov_ip_resp_map = {}
+
+def log(level, msg):
+    if level == 0:
+        print msg
+    else:
+        if debug:
+            print msg
+
+def createSessionToken():
+    url='https://'+rmc_host_ip +'/redfish/v1/SessionService/Sessions'
+    headers = {'Content-type': 'application/json'}
+    data={'UserName':'administrator','Password':'HPE1nnov'}
+    verify=cert_path
+    response = requests.post(url, data=json.dumps(data), headers=headers, verify=verify)
+    if response.status_code == 201:
+        return response.headers['X-Auth-Token']
+    else:
+        print 'error in getting session token ' + str(response.status_code)
+        return ''
+
+def getEventSubscriberIp(sub_url, sessionId):
+    url='https://'+rmc_host_ip + sub_url
+    headers = {'x-auth-token':sessionId}
+    verify=cert_path
+    response = requests.get(url, headers=headers, verify=verify)
+    if response.status_code == 200:
+        dest = response.json()['Destination'] if 'Destination' in response.json() else ''
+        if dest:
+            ov_ip = dest.split('/')[2]
+            ov_ip_resp_map[ov_ip] = response.json()
+            return ov_ip
+    else:
+        print 'error in getting event subscription : ' + str(response.status_code)
+        return ''
+
+def deleteEventSubscription(sub_url, sessionId, ip):
+    url='https://'+rmc_host_ip + sub_url
+    headers = {'x-auth-token':sessionId}
+    verify=cert_path
+    response = requests.delete(url, headers=headers, verify=verify)
+    if response.status_code == 204:
+        log(0, "===== event subscription for " + ip + " deleted ======")
+    else:
+        print 'error in deleting event subscription : ' + str(response.status_code)
+        return ''
+
+def getEventSubHosts(sessionId):
